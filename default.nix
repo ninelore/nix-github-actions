@@ -13,34 +13,50 @@ let
     # Return a GitHub Actions matrix from a package set shaped like
     # the Flake attribute packages/checks.
     mkGithubMatrix =
-      { checks # Takes an attrset shaped like { x86_64-linux = { hello = pkgs.hello; }; }
-      , attrPrefix ? "githubActions.checks"
-      , platforms ? self.githubPlatforms
-      }: {
+      {
+        checks, # Takes an attrset shaped like { x86_64-linux = { hello = pkgs.hello; }; }
+        attrPrefix ? "githubActions.checks",
+        platforms ? self.githubPlatforms,
+      }:
+      let
+        # Helper function to check if an attribute should be included
+        shouldInclude =
+          system: attr:
+          let
+            drv = checks.${system}.${attr};
+            meta = drv.meta or { };
+            platforms = meta.platforms or (attrNames self.githubPlatforms);
+          in
+          builtins.elem system platforms;
+      in
+      {
         inherit checks;
         matrix = {
-          include = flatten (attrValues (
-            mapAttrs
-              (
-                system: pkgs: builtins.map
-                  (attr:
-                    {
-                      name = attr;
-                      inherit system;
-                      os =
-                        let
+          include = flatten (
+            attrValues (
+              mapAttrs (
+                system: pkgs:
+                builtins.filter (x: x != null) (
+                  attrValues (
+                    mapAttrs (
+                      attrName: attrVal:
+                      if shouldInclude system attrName then
+                        {
+                          name = attrName;
+                          inherit system;
                           os = platforms.${system};
-                        in
-                        if builtins.typeOf os == "list" then os else [ os ];
-                      attr = (
-                        if attrPrefix != ""
-                        then "${attrPrefix}.${system}.\"${attr}\""
-                        else "${system}.\"${attr}\""
-                      );
-                    })
-                  (attrNames pkgs)
-              )
-              checks));
+                          attr = (
+                            if attrPrefix != "" then "${attrPrefix}.${system}.\"${attrName}\"" else "${system}.\"${attrName}\""
+                          );
+                        }
+                      else
+                        null
+                    ) pkgs
+                  )
+                )
+              ) checks
+            )
+          );
         };
       };
   };
