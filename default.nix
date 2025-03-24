@@ -26,8 +26,9 @@ let
             drv = checks.${system}.${attr};
             meta = drv.meta or { };
             platforms = meta.platforms or (attrNames self.githubPlatforms);
+            redist = meta.license.redistributable or true;
           in
-          builtins.elem system platforms;
+          builtins.elem system platforms && redist;
       in
       {
         inherit checks;
